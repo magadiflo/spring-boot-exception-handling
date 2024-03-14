@@ -202,3 +202,55 @@ public class CustomerRestController {
     }
 }
 ````
+
+## Configuraciones de la aplicación
+
+````yml
+server:
+  port: 8080
+  error:
+    include-message: always
+
+spring:
+  application:
+    name: spring-boot-exception-handling
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/db_spring_data_jpa
+    username: admin
+    password: magadiflo
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
+````
+
+## import.sql
+
+En el `src/main/resources` crearemos el archivo `import.sql` donde definiremos algunos registros que se insertarán en
+la tabla `customers`. Recordar que la tabla se creará de manera automática en la base de datos gracias a la
+configuración `spring.jpa.hibernate.ddl-auto=create-drop`.
+
+````sql
+INSERT INTO customers (name, email, phone_number) VALUES('Juan Pérez', 'juan@example.com', '555-1234');
+INSERT INTO customers (name, email, phone_number) VALUES('María García', 'maria@example.com', '555-5678');
+INSERT INTO customers (name, email, phone_number) VALUES('Pedro López', 'pedro@example.com', '555-9012');
+INSERT INTO customers (name, email, phone_number) VALUES('Ana Martínez', 'ana@example.com', '555-3456');
+INSERT INTO customers (name, email, phone_number) VALUES('Luis Hernández', 'luis@example.com', '555-7890');
+INSERT INTO customers (name, email, phone_number) VALUES('Sofía Rodríguez', 'sofia@example.com', '555-2345');
+INSERT INTO customers (name, email, phone_number) VALUES('Carlos Sánchez', 'carlos@example.com', '555-6789');
+INSERT INTO customers (name, email, phone_number) VALUES('Laura Gómez', 'laura@example.com', '555-0123');
+INSERT INTO customers (name, email, phone_number) VALUES('Daniel Fernández', 'daniel@example.com', '555-4567');
+INSERT INTO customers (name, email, phone_number) VALUES('Marta Díaz', 'marta@example.com', '555-8901');
+````
+
+---
+
