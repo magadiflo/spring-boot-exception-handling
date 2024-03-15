@@ -377,3 +377,152 @@ public class MalformedHeaderException extends BadRequestException {
     }
 }
 ````
+
+## Creando clase que unificará respuesta de excepción
+
+Creamos una clase que seá la que definirá el formato que tendrán todas nuestras respuestas de excepciones cuando un
+cliente realice alguna petición y nuestro backend falle. En el código siguiente se muestra entre comentarios un
+posible ejemplo de los valores que tendrán los campos:
+
+````java
+
+@ToString
+@Getter
+public class ApiExceptionMessage {
+
+    private final String simpleName;    // FieldInvalidException
+    private final String httpStatus;    // BAD_REQUEST
+    private final Integer code;         // 400
+    private final String message;       // El email 'martin.com' es incorrecto
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private final List<FieldExceptionMessage> fieldErrors;
+
+    public ApiExceptionMessage(String simpleName, HttpStatus httpStatus, String message, List<FieldExceptionMessage> fieldErrors) {
+        this.simpleName = simpleName;
+        this.httpStatus = httpStatus.name();
+        this.code = httpStatus.value();
+        this.message = message;
+        this.fieldErrors = fieldErrors;
+    }
+
+}
+````
+
+En el código anterior vemos un campo llamado `fieldErrors`, quien contendrá los errores correspondientes a los
+campos cuyas validaciones hayan fallado. La anotación `@JsonInclude(JsonInclude.Include.NON_NULL)` significa que si
+el campo `fieldErrors` es `NULL` entonces, no se va a serializar en la respuesta `JSON`; en otras palabras, para que
+el campo `fieldErrors` se incluya en la respuesta json al cliente, este campo debe ser `NON_NULL`.
+
+El campo `fieldErrors` es una lista de `FieldExceptionMessage` quien contendrá el nombre del campo y su lista de
+errores:
+
+````java
+
+@ToString
+@Getter
+public class FieldExceptionMessage {
+
+    private final String field;
+    private final List<String> errors = new ArrayList<>();
+
+    public FieldExceptionMessage(String field) {
+        this.field = field;
+    }
+
+}
+````
+
+## Rest Controller Advice
+
+Creamos nuestro controlador principal donde centralizaremos el manejo de excepciones aplicaremos cierta lógica y
+retornaremos el mensaje unificado al cliente:
+
+````java
+
+@Slf4j
+@RestControllerAdvice
+public class ApiExceptionHandler {
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<ApiExceptionMessage> notFoundException(Exception exception) {
+        return this.responseEntity(exception.getClass().getSimpleName(), HttpStatus.NOT_FOUND, exception.getMessage());
+    }
+
+    @ExceptionHandler({
+            BadRequestException.class,
+            MethodArgumentNotValidException.class,
+            HttpRequestMethodNotSupportedException.class,
+            MissingRequestHeaderException.class,
+            MissingServletRequestParameterException.class,
+            MethodArgumentTypeMismatchException.class,
+            HttpMessageNotReadableException.class
+    })
+    public ResponseEntity<ApiExceptionMessage> badRequestException(Exception exception) {
+
+        if (exception instanceof MethodArgumentNotValidException) {
+            List<FieldExceptionMessage> errors = new ArrayList<>();
+            Map<String, FieldExceptionMessage> validatedFieldMap = new HashMap<>();
+            BindingResult bindingResult = ((MethodArgumentNotValidException) exception).getBindingResult();
+
+            bindingResult.getAllErrors().forEach(objectError -> {
+                String fieldName = ((FieldError) objectError).getField();
+                String errorMessage = objectError.getDefaultMessage();
+
+                FieldExceptionMessage fieldExceptionMessage = validatedFieldMap.computeIfAbsent(fieldName, FieldExceptionMessage::new);
+                fieldExceptionMessage.getErrors().add(errorMessage);
+
+                if (!errors.contains(fieldExceptionMessage)) {
+                    errors.add(fieldExceptionMessage);
+                }
+            });
+
+            return this.responseEntity(exception.getClass().getSimpleName(), HttpStatus.BAD_REQUEST, "Se detectaron errores en los campos", errors);
+        }
+
+        return this.responseEntity(exception.getClass().getSimpleName(), HttpStatus.BAD_REQUEST, exception.getMessage());
+    }
+
+    @ExceptionHandler({
+            ConflictException.class,
+            DataIntegrityViolationException.class,
+            DuplicateKeyException.class
+    })
+    public ResponseEntity<ApiExceptionMessage> conflictException(Exception exception) {
+        String message = switch (exception) {
+            case DuplicateKeyException duplicate -> duplicate.getMostSpecificCause().toString();
+            case DataIntegrityViolationException di -> di.getMostSpecificCause().toString().split(":")[1].trim();
+            default -> exception.getMessage();
+        };
+        return this.responseEntity(exception.getClass().getSimpleName(), HttpStatus.CONFLICT, message);
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiExceptionMessage> forbiddenException(Exception exception) {
+        return this.responseEntity(exception.getClass().getSimpleName(), HttpStatus.FORBIDDEN, exception.getMessage());
+    }
+
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<Void> unauthorizedException() {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiExceptionMessage> fatalErrorUnexpectedException(Exception exception) {
+        return this.responseEntity(exception.getClass().getSimpleName(), HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage());
+    }
+
+    private ResponseEntity<ApiExceptionMessage> responseEntity(String simpleName, HttpStatus httpStatus, String message) {
+        return this.responseEntity(simpleName, httpStatus, message, null);
+    }
+
+    private ResponseEntity<ApiExceptionMessage> responseEntity(String simpleName, HttpStatus httpStatus, String message, List<FieldExceptionMessage> fieldErrors) {
+        return ResponseEntity.status(httpStatus).body(new ApiExceptionMessage(simpleName, httpStatus, message, fieldErrors));
+    }
+}
+````
+
+Es importante notar que podemos agrupar las excepciones de java en un mismo método handler. Ahora, recordemos que hemos
+creado excepciones personalizadas principales y específicas, en ese sentido, cuando definamos un método
+`@ExceptionHandler` basta con especificar la excepción principal, de esa manera, cuando lancemos una excepción
+específica, la excepción principal podrá capturarlo.
+
