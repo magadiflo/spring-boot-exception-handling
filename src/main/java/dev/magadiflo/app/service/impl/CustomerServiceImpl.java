@@ -1,5 +1,6 @@
 package dev.magadiflo.app.service.impl;
 
+import dev.magadiflo.app.exceptions.domain.NotFoundException;
 import dev.magadiflo.app.persistence.entity.Customer;
 import dev.magadiflo.app.persistence.repository.CustomerRepository;
 import dev.magadiflo.app.service.CustomerService;
@@ -27,14 +28,14 @@ public class CustomerServiceImpl implements CustomerService {
     @Transactional(readOnly = true)
     public Customer findCustomerById(Long id) {
         return this.customerRepository.findById(id)
-                .orElseThrow(() -> null);
+                .orElseThrow(() -> new NotFoundException("Ningún customer con el id %d".formatted(id)));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Customer findCustomerByEmail(String email) {
         return this.customerRepository.findCustomerByEmail(email)
-                .orElseThrow(() -> null);
+                .orElseThrow(() -> new NotFoundException("Ningún customer con email %s".formatted(email)));
     }
 
     @Override
@@ -56,7 +57,7 @@ public class CustomerServiceImpl implements CustomerService {
                     return customerDB;
                 })
                 .map(this.customerRepository::save)
-                .orElseThrow(() -> null);
+                .orElseThrow(() -> new NotFoundException("Ningún customer con id %d para actualizar".formatted(id)));
     }
 
     @Override
@@ -67,6 +68,6 @@ public class CustomerServiceImpl implements CustomerService {
                     this.customerRepository.deleteById(id);
                     return true;
                 })
-                .orElseThrow(() -> null);
+                .orElseThrow(() -> new NotFoundException("Ningún customer con id %d para eliminar".formatted(id)));
     }
 }
