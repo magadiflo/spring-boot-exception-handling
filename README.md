@@ -18,6 +18,10 @@ Para este proyecto se tomó como referencia el tutorial del canal de youtube **m
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
 
     <dependency>
         <groupId>com.mysql</groupId>
@@ -254,3 +258,122 @@ INSERT INTO customers (name, email, phone_number) VALUES('Marta Díaz', 'marta@e
 
 ---
 
+# Tratamiento de Excepciones
+
+---
+
+Tomaremos como referencia el siguiente diagrama mostrado en el tutorial:
+
+![Manejo de excepciones](./assets/01.manejo-excepciones.png)
+
+Es importante recordar las respuestas que podríamos lanzar:
+
+![respuestas](./assets/02.respuesta-excepciones.png)
+
+## Agregando anotaciones de validación a la entidad
+
+Es importante, recordar que en un proyecto real debemos usar DTOs y colocar las anotaciones de validación en dichos
+DTOs, mientras que las entidades únicamente están destinadas a trabajar con la base de datos, pero para hacerlo más
+sencillo, es que en este proyecto se está trabajando directamente con la entidad.
+
+````java
+
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
+@Data
+@Entity
+@Table(name = "customers")
+public class Customer {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @NotBlank
+    @Size(min = 3, max = 20)
+    @Pattern(regexp = "[a-zA-Z]+", message = "El name solo puede contener letras")
+    @Column(nullable = false)
+    private String name;
+
+    @NotBlank
+    @Email
+    @Column(nullable = false, unique = true)
+    private String email;
+
+    @Pattern(regexp = "[0-9]+", message = "El phone number solo puede contener números")
+    @Column(unique = true)
+    private String phoneNumber;
+}
+````
+
+## Creando excepciones principales
+
+Definimos nuestras excepciones personalizadas que extienden de `RuntimeException`:
+
+````java
+public class BadRequestException extends RuntimeException {
+    public BadRequestException(String message) {
+        super(message);
+    }
+}
+````
+
+````java
+public class ConflictException extends RuntimeException {
+    public ConflictException(String message) {
+        super(message);
+    }
+}
+````
+
+````java
+public class ForbiddenException extends RuntimeException {
+    public ForbiddenException(String message) {
+        super(message);
+    }
+}
+````
+
+````java
+public class NotFoundException extends RuntimeException {
+    public NotFoundException(String message) {
+        super(message);
+    }
+}
+````
+
+````java
+public class UnauthorizedException extends RuntimeException {
+    public UnauthorizedException(String message) {
+        super(message);
+    }
+}
+````
+
+## Creando excepciones más específicas
+
+Estas excepciones son más específicas, así que heredamos de alguna excepción principal:
+
+````java
+public class FieldAlreadyExistException extends ConflictException {
+    public FieldAlreadyExistException(String message) {
+        super(message);
+    }
+}
+````
+
+````java
+public class FieldInvalidException extends BadRequestException {
+    public FieldInvalidException(String message) {
+        super(message);
+    }
+}
+````
+
+````java
+public class MalformedHeaderException extends BadRequestException {
+    public MalformedHeaderException(String message) {
+        super(message);
+    }
+}
+````
