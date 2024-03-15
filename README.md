@@ -621,6 +621,7 @@ Como hemos creado varias excepciones entre principales y específicas, utilizar�
 y ver su comportamiento:
 
 ````java
+
 @RequiredArgsConstructor
 @Slf4j
 @RestController
@@ -644,6 +645,7 @@ public class CustomerRestController {
         return ResponseEntity.ok(this.customerService.findCustomerByEmail(email));
     }
 
+    // Anotación @Valid para realizar la validación de los campos de Customer
     @PostMapping
     public ResponseEntity<Customer> saveCustomer(@Valid @RequestBody Customer customer) {
         Customer customerDB = this.customerService.saveCustomer(customer);
@@ -651,8 +653,9 @@ public class CustomerRestController {
         return ResponseEntity.created(location).body(customerDB);
     }
 
+    // Anotación @Valid para realizar la validación de los campos de Customer
     @PutMapping(path = "/{id}")
-    public ResponseEntity<Customer> updateCustomer(@Valid @PathVariable Long id, @RequestBody Customer customer) {
+    public ResponseEntity<Customer> updateCustomer(@PathVariable Long id, @Valid @RequestBody Customer customer) {
         return ResponseEntity.ok(this.customerService.updateCustomer(id, customer));
     }
 
@@ -667,18 +670,127 @@ public class CustomerRestController {
     public void showMalformedHeaderException() {
         throw new MalformedHeaderException("Token: Bearer 123.123.123.123");
     }
+
     @GetMapping(path = "/field-already")
     public void showFieldAlreadyExistException() {
         throw new FieldAlreadyExistException("El email 'martin@outlook.com' ya existe!");
     }
+
     @GetMapping(path = "/field-invalid")
     public void showFieldInvalidException() {
         throw new FieldInvalidException("El email 'martin.com' es incorrecto");
     }
+
     @GetMapping(path = "/unauthorized")
     public void showUnauthorizedException() {
         throw new UnauthorizedException("No está autorizado!");
     }
 
 }
+````
+
+## Verificando respuesta de excepciones
+
+````bash
+$ curl -v http://localhost:8080/api/v1/customers/email/alexa@google.com | jq
+
+>
+< HTTP/1.1 404
+<
+{
+  "simpleName": "NotFoundException",
+  "httpStatus": "NOT_FOUND",
+  "code": 404,
+  "message": "Ningún customer con email alexa@google.com"
+}
+````
+
+En este ejemplo, se registro previamente un customer con los mismos datos que se pretende registrar nuevamente, así
+que la validación a nivel de integridad nos muestra el siguiente mensaje:
+
+````bash
+$ curl -v -X POST -H "Content-Type: application/json" -d "{\"name\": \"Martin\", \"email\": \"martin@gmail.com\", \"phoneNumber\": \"943658596\"}" http://localhost:8080/api/v1/customers | jq
+
+>
+< HTTP/1.1 409
+<
+{
+  "simpleName": "DataIntegrityViolationException",
+  "httpStatus": "CONFLICT",
+  "code": 409,
+  "message": "Duplicate entry 'martin@gmail.com' for key 'UK_rfbvkrffamfql7cjmen8v976v'"
+}
+````
+
+Enviamos datos incorrectos para forzar la validación:
+
+````bash
+$ curl -v -X POST -H "Content-Type: application/json" -d "{\"name\": \"\", \"email\": \"martin\", \"phoneNumber\": \"+51-943658596\"}" http://localhost:8080/api/v1/customers | jq
+
+>
+< HTTP/1.1 400
+<
+{
+  "simpleName": "MethodArgumentNotValidException",
+  "httpStatus": "BAD_REQUEST",
+  "code": 400,
+  "message": "Se detectaron errores en los campos",
+  "fieldErrors": [
+    {
+      "field": "name",
+      "errors": [
+        "size must be between 3 and 20",
+        "must not be blank",
+        "El name solo puede contener letras"
+      ]
+    },
+    {
+      "field": "email",
+      "errors": [
+        "must be a well-formed email address"
+      ]
+    },
+    {
+      "field": "phoneNumber",
+      "errors": [
+        "El phone number solo puede contener números"
+      ]
+    }
+  ]
+}
+````
+
+````bash
+$ curl -v http://localhost:8080/api/v1/customers/malformed | jq
+
+>
+< HTTP/1.1 400
+<
+{
+  "simpleName": "MalformedHeaderException",
+  "httpStatus": "BAD_REQUEST",
+  "code": 400,
+  "message": "Token: Bearer 123.123.123.123"
+}
+````
+
+````bash
+$ curl -v http://localhost:8080/api/v1/customers/field-already | jq
+
+>
+< HTTP/1.1 409
+<
+{
+  "simpleName": "FieldAlreadyExistException",
+  "httpStatus": "CONFLICT",
+  "code": 409,
+  "message": "El email 'martin@outlook.com' ya existe!"
+}
+````
+
+````bash
+$  curl -v http://localhost:8080/api/v1/customers/unauthorized | jq
+
+>
+< HTTP/1.1 401
 ````
