@@ -1,7 +1,12 @@
 package dev.magadiflo.app.web.api;
 
+import dev.magadiflo.app.exceptions.domain.FieldAlreadyExistException;
+import dev.magadiflo.app.exceptions.domain.FieldInvalidException;
+import dev.magadiflo.app.exceptions.domain.MalformedHeaderException;
+import dev.magadiflo.app.exceptions.domain.UnauthorizedException;
 import dev.magadiflo.app.persistence.entity.Customer;
 import dev.magadiflo.app.service.CustomerService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -34,14 +39,14 @@ public class CustomerRestController {
     }
 
     @PostMapping
-    public ResponseEntity<Customer> saveCustomer(@RequestBody Customer customer) {
+    public ResponseEntity<Customer> saveCustomer(@Valid @RequestBody Customer customer) {
         Customer customerDB = this.customerService.saveCustomer(customer);
         URI location = URI.create("/api/v1/customers/" + customerDB.getId());
         return ResponseEntity.created(location).body(customerDB);
     }
 
     @PutMapping(path = "/{id}")
-    public ResponseEntity<Customer> updateCustomer(@PathVariable Long id, @RequestBody Customer customer) {
+    public ResponseEntity<Customer> updateCustomer(@Valid @PathVariable Long id, @RequestBody Customer customer) {
         return ResponseEntity.ok(this.customerService.updateCustomer(id, customer));
     }
 
@@ -50,4 +55,23 @@ public class CustomerRestController {
         this.customerService.deleteCustomerById(id);
         return ResponseEntity.noContent().build();
     }
+
+    // Endpoints para ver el lanzamiento de algunas excepciones
+    @GetMapping(path = "/malformed")
+    public void showMalformedHeaderException() {
+        throw new MalformedHeaderException("Token: Bearer 123.123.123.123");
+    }
+    @GetMapping(path = "/field-already")
+    public void showFieldAlreadyExistException() {
+        throw new FieldAlreadyExistException("El email 'martin@outlook.com' ya existe!");
+    }
+    @GetMapping(path = "/field-invalid")
+    public void showFieldInvalidException() {
+        throw new FieldInvalidException("El email 'martin.com' es incorrecto");
+    }
+    @GetMapping(path = "/unauthorized")
+    public void showUnauthorizedException() {
+        throw new UnauthorizedException("No está autorizado!");
+    }
+
 }

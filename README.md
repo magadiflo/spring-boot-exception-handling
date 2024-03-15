@@ -506,6 +506,7 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
 
+    //---- Método General de Excepciones
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiExceptionMessage> fatalErrorUnexpectedException(Exception exception) {
         return this.responseEntity(exception.getClass().getSimpleName(), HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage());
@@ -526,3 +527,158 @@ creado excepciones personalizadas principales y específicas, en ese sentido, cu
 `@ExceptionHandler` basta con especificar la excepción principal, de esa manera, cuando lancemos una excepción
 específica, la excepción principal podrá capturarlo.
 
+En la clase anterior estamos definiendo casi al final un método general de excepciones:
+
+````java
+
+@ExceptionHandler(Exception.class)
+public ResponseEntity<ApiExceptionMessage> fatalErrorUnexpectedException(Exception exception) {
+    return this.responseEntity(exception.getClass().getSimpleName(), HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage());
+}
+````
+
+Ocurre que, es probable que nosotros no manejemos todos los errores que puedan ocurrir en nuestra aplicación, así que
+para esos casos definimos el método anterior, de esa manera nos aseguramos de que siempre el mensaje retornado será
+el mismo.
+
+Ahora, una vez que ha ocurrido el error y se ha llamado al método `fatalErrorUnexpectedException`, debemos luego
+asegurarnos de controlar el error, es decir crearle su propia excepción y método handler o agruparlo en algun método
+handler ya antes construido.
+
+## Lanzando excepciones desde la capa de servicio
+
+Al inicio de este tutorial, en algunos métodos de este servicio estábamos retornando `null`, pero ahora que ya tenemos
+creado nuestras excepciones y construido el controlador `ApiExceptionHandler`, llega la hora de realizar algunos cambios
+al código, de tal manera que ahora se lance la excepción que le corresponda:
+
+````java
+
+@RequiredArgsConstructor
+@Slf4j
+@Service
+public class CustomerServiceImpl implements CustomerService {
+
+    private final CustomerRepository customerRepository;
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Customer> findAllCustomers() {
+        return this.customerRepository.findAll();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Customer findCustomerById(Long id) {
+        return this.customerRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Ningún customer con el id %d".formatted(id)));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Customer findCustomerByEmail(String email) {
+        return this.customerRepository.findCustomerByEmail(email)
+                .orElseThrow(() -> new NotFoundException("Ningún customer con email %s".formatted(email)));
+    }
+
+    @Override
+    @Transactional
+    public Customer saveCustomer(Customer customer) {
+        return this.customerRepository.save(customer);
+    }
+
+    @Override
+    @Transactional
+    public Customer updateCustomer(Long id, Customer customer) {
+        return this.customerRepository.findById(id)
+                .map(customerDB -> {
+                    customerDB.setName(customer.getName());
+                    customerDB.setEmail(customer.getEmail());
+                    if (!customer.getPhoneNumber().isBlank()) {
+                        customerDB.setPhoneNumber(customer.getPhoneNumber());
+                    }
+                    return customerDB;
+                })
+                .map(this.customerRepository::save)
+                .orElseThrow(() -> new NotFoundException("Ningún customer con id %d para actualizar".formatted(id)));
+    }
+
+    @Override
+    @Transactional
+    public void deleteCustomerById(Long id) {
+        this.customerRepository.findById(id)
+                .map(customerDB -> {
+                    this.customerRepository.deleteById(id);
+                    return true;
+                })
+                .orElseThrow(() -> new NotFoundException("Ningún customer con id %d para eliminar".formatted(id)));
+    }
+}
+````
+
+## Lanzando excepciones para ver su comportamiento
+
+Como hemos creado varias excepciones entre principales y específicas, utilizaré el controlador únicamente para lanzarlas
+y ver su comportamiento:
+
+````java
+@RequiredArgsConstructor
+@Slf4j
+@RestController
+@RequestMapping(path = "/api/v1/customers")
+public class CustomerRestController {
+
+    private final CustomerService customerService;
+
+    @GetMapping
+    public ResponseEntity<List<Customer>> listAllCustomers() {
+        return ResponseEntity.ok(this.customerService.findAllCustomers());
+    }
+
+    @GetMapping(path = "/{id}")
+    public ResponseEntity<Customer> getCustomerById(@PathVariable Long id) {
+        return ResponseEntity.ok(this.customerService.findCustomerById(id));
+    }
+
+    @GetMapping(path = "/email/{email}")
+    public ResponseEntity<Customer> getCustomerByEmail(@PathVariable String email) {
+        return ResponseEntity.ok(this.customerService.findCustomerByEmail(email));
+    }
+
+    @PostMapping
+    public ResponseEntity<Customer> saveCustomer(@Valid @RequestBody Customer customer) {
+        Customer customerDB = this.customerService.saveCustomer(customer);
+        URI location = URI.create("/api/v1/customers/" + customerDB.getId());
+        return ResponseEntity.created(location).body(customerDB);
+    }
+
+    @PutMapping(path = "/{id}")
+    public ResponseEntity<Customer> updateCustomer(@Valid @PathVariable Long id, @RequestBody Customer customer) {
+        return ResponseEntity.ok(this.customerService.updateCustomer(id, customer));
+    }
+
+    @DeleteMapping(path = "/{id}")
+    public ResponseEntity<Void> deleteCustomer(@PathVariable Long id) {
+        this.customerService.deleteCustomerById(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // Endpoints para ver el lanzamiento de algunas excepciones
+    @GetMapping(path = "/malformed")
+    public void showMalformedHeaderException() {
+        throw new MalformedHeaderException("Token: Bearer 123.123.123.123");
+    }
+    @GetMapping(path = "/field-already")
+    public void showFieldAlreadyExistException() {
+        throw new FieldAlreadyExistException("El email 'martin@outlook.com' ya existe!");
+    }
+    @GetMapping(path = "/field-invalid")
+    public void showFieldInvalidException() {
+        throw new FieldInvalidException("El email 'martin.com' es incorrecto");
+    }
+    @GetMapping(path = "/unauthorized")
+    public void showUnauthorizedException() {
+        throw new UnauthorizedException("No está autorizado!");
+    }
+
+}
+````
